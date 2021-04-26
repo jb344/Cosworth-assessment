@@ -1,0 +1,81 @@
+This file contains the answers to part 2 of the assessment
+
+1) What do you perceive as the benefits to using the interleaved data format on a data logger?
+
+    It's important to first understand the purpose of interleaved data. This is to enable faster processing speeds
+    as well as ensuring all the immediately needed data is available as soon as possible. For example interleaved 
+    data is used in audio and video files. AVI format, Audio Video Interleaved means that as the file is processed
+    by a codec, the information it decodes at any specific moment contains both audio and video information. The
+    structure;
+
+        A       V       A       V       A       V       A       V
+        0110    1110    0110    1110    0110    1110    0110    1110
+
+    This format means that as the data is received, the audio and video can be decoded simultaneously, if the structure
+    was instead a stream of audio, followed by a stream of video;
+
+        A       A       A       A       V       V       V       V
+        0110    0110    0110    0110    1110    1110    1110    1110
+
+    The person watching the film would have video out of sync with the audio. Because the audio playing at any given 
+    moment, would only relate to video yet to be received.
+
+    Furthermore, as the data that is being logged is likely to be highly time sensitive (realtime) sensor information,
+    the sooner that all of the data from each sensor is collected and collated the better for display to an engineer
+    or driver etc making use of all of the sensor information.
+
+    Lets say oil temperature information is logged, as well as oil pressure. When the device is being stressed, both of these
+    values are expected to increase. If the temperature data is loaded from the logger before the pressure (if the data was
+    not interleaved), then the driver etc will not be presented with all of the information they would need to make informed
+    and critical decisions, in realtime.
+
+    There is however a potential flaw to the interleaved format. It makes the assumption that all of the sensors will have 
+    logged perfectly as expected, every tick, in every block. Lets say sensor 1 should log at 100Hz, but for whatever reason
+    the sensor fails to provide values (faulty), then no values would be logged (unless the logging functions can detect a faulty
+    sensor and log error values or nulls). This would mean every other sensors values would be offset by one. When we come
+    to decode this, we would be attributing the wrong sensor values to the wrong sensor. Here is an example;
+
+        Ticks           <-----1-----><-----2-----><-----3-----><-----4----->
+        Sensor #         1  2  3  4   1  2  3  4   2  3  4      2  3  4
+        Data             w  x  y  z   w  x  y  z   x  y  z      x  y  z
+                                                   ^            ^
+                                                   !            !
+
+    Our decoder would attribute sensor 2's values with sensor 1 and so on, and sensor 4 would contain sensor 2's value from
+    the next tick!
+
+
+
+
+2) How would you test the decoding algorithms that you have designed?
+
+    The code I have written is functional, and was compiled by g++.exe (MinGW.org GCC Build-20200227-1) 9.2.0 using 
+    Visual Studio Code on a Windows 10 machine, and thus can either be run natively or recompiled if necessary... 
+    On Linux that would look something like;
+
+        g++ -std=c++11 part_one.cpp -o cosworth
+
+    The code comes with test data, and input/output logs in order to see the performance of the algorithm. Further testing
+    could be achieved by introducing more test sources (sensors) into the algorithm, with varying frequencies of data
+    production. As well as adding more blocks, with varying amounts of sensor information.
+
+    Unit tests could also be written around each of the functions, the generation of channel data, generation of interleaved
+    data, and finally the generation of the continuous data. In fact this would be a highly recommended method of assuring
+    the quality of the algorithm.
+
+
+
+
+3) If you were to implement an application to do the above and to read the data over Ethernet, how would
+you structure the application to ensure maximum throughput at all times?
+
+    If the code was to be run over ethernet, such as where a data producer (sensors) could be running at a differing rate to the
+    data consumer (our algorithm) then I would employ threads and circular buffers, in a consumer/producer design.
+
+    The ethernet link would also likely be utilising TCP, so as to provide the resiliency and packet checking necessary to ensure
+    all of our critical logs are received. UDP would offer some benefits over TCP, such as offering simple multicast should
+    we wish to have multiple PC's/loggers set up. However at the cost of resilience.
+
+    A thread running the ethernet fetch, which would populate a circular buffer, capable of holding at least two blocks
+    of interlevaed data at any given moment. A secondary thread reading from the ciruclar buffer, decoding it using our
+    algorithm. Mutexes and concurrency checks would need to be in place on the circular buffer to avoid deadlocks.
